@@ -1,7 +1,7 @@
 use clap::Parser;
 use du_rs::{format_size, top_largest, walk_dir, DirStats};
 use std::path::Path;
-use std::process;
+use std::process::ExitCode;
 
 #[derive(Parser)]
 #[command(name = "du-rs", about = "Disk usage analyzer", version)]
@@ -19,16 +19,13 @@ struct Cli {
     human_readable: bool,
 }
 
-fn main() {
+fn main() -> ExitCode {
     let cli = Cli::parse();
     let path = Path::new(&cli.path);
 
     let mut stats = DirStats::new();
 
-    if let Err(e) = walk_dir(path, &mut stats) {
-        eprintln!("Error walking directory: {}", e);
-        process::exit(1);
-    }
+    let had_error = walk_dir(path, &mut stats);
 
     top_largest(&mut stats, cli.top);
 
@@ -49,5 +46,11 @@ fn main() {
             format!("{} bytes", size)
         };
         println!("  {:>12}  {}", size_str, path);
+    }
+
+    if had_error {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
     }
 }

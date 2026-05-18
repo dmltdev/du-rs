@@ -1,10 +1,10 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub struct DirStats {
     pub file_count: usize,
     pub total_size: u64,
-    pub largest_files: Vec<(u64, String)>,
+    pub largest_files: Vec<(u64, PathBuf)>,
 }
 
 impl DirStats {
@@ -17,28 +17,59 @@ impl DirStats {
     }
 }
 
-pub fn walk_dir(path: &Path, stats: &mut DirStats) -> std::io::Result<()> {
-    for entry in fs::read_dir(path)? {
-        let entry = entry?;
-        let metadata = entry.metadata()?;
+impl Default for DirStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub fn walk_dir(path: &Path, stats: &mut DirStats) -> bool {
+    let entries = match fs::read_dir(path) {
+        Ok(it) => it,
+        Err(e) => {
+            eprintln!("du-rs: cannot ready directory '{}': {}", path.display(), e);
+            return true;
+        }
+    };
+
+    let mut had_error = false;
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("du-rs: error reading entry in '{}': {}", path.display(), e);
+                had_error = true;
+                continue;
+            }
+        };
+
         let entry_path = entry.path();
 
+        let metadata = match fs::symlink_metadata(&entry_path) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("du-rs: cannot access '{}': {}", entry_path.display(), e);
+                had_error = true;
+                continue;
+            }
+        };
+
         if metadata.is_dir() {
-            walk_dir(&entry_path, stats)?;
+            had_error |= walk_dir(&entry_path, stats);
         } else {
             let size = metadata.len();
             stats.file_count += 1;
             stats.total_size += size;
-            stats
-                .largest_files
-                .push((size, entry_path.to_string_lossy().into_owned()));
+            stats.largest_files.push((size, entry_path));
         }
     }
-    Ok(())
+
+    had_error
 }
 
 pub fn top_largest(stats: &mut DirStats, n: usize) {
-    stats.largest_files.sort_by(|a, b| b.0.cmp(&a.0));
+    stats.largest_files.sort_by_key(|f| std::cmp::Reverse(f.0));
     stats.largest_files.truncate(n);
 }
 
