@@ -45,7 +45,7 @@ fn main() -> ExitCode {
         } else {
             format!("{} bytes", size)
         };
-        println!("  {:>12}  {}", size_str, path);
+        println!("  {:>12}  {}", size_str, path.display());
     }
 
     if had_error {
